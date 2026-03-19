@@ -4,8 +4,8 @@ import os
 # Agrega el directorio raíz al path para poder importar src
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.shared.database import SessionLocal
-from src.shared.models import Empleado, Usuario
+from src.shared.services.database import SessionLocal
+from src.shared.services.models import Empleado, Usuario
 from src.features.auth.services.service import hashear_contrasena
 
 def actualizar_contrasenas():
