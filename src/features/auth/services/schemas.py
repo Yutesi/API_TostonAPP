@@ -1,11 +1,12 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from pydantic import Field
 
 
 # ── Lo que llega en el body del login ──
 class LoginInput(BaseModel):
-    correo: EmailStr
-    contrasena: str
+    correo:     str = Field(example="admin@empresa.com")
+    contrasena: str = Field(example="Admin123@")
 
 
 # ── Lo que se guarda dentro del token JWT ──

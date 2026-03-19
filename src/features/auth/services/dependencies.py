@@ -1,5 +1,5 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
@@ -14,13 +14,14 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM  = os.getenv("ALGORITHM", "HS256")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = HTTPBearer()
 
 
 def obtener_usuario_actual(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
+    token = credentials.credentials
     """Decodifica el token y retorna el usuario o empleado activo."""
     credenciales_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
