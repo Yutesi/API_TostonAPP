@@ -1,6 +1,6 @@
+import base64
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from datetime import datetime
 
 from src.shared.services.models import Rol, Permiso, RolXPermiso
 from .schemas import RolCreate, RolUpdate, ROLES_PROTEGIDOS
@@ -8,6 +8,18 @@ from .schemas import RolCreate, RolUpdate, ROLES_PROTEGIDOS
 
 def _es_protegido(id_rol: int) -> bool:
     return id_rol in ROLES_PROTEGIDOS
+
+
+def _icono_a_str(icono_bytes) -> str | None:
+    """
+    Convierte el campo Icono (LargeBinary/bytes) a base64 string para JSON.
+    Retorna None si el campo está vacío.
+    """
+    if not icono_bytes:
+        return None
+    if isinstance(icono_bytes, str):
+        return icono_bytes  # ya es string (ruta o emoji), no tocar
+    return base64.b64encode(icono_bytes).decode("utf-8")
 
 
 def _formato_rol(rol, db: Session) -> dict:
@@ -19,17 +31,19 @@ def _formato_rol(rol, db: Session) -> dict:
         .all()
     )
     return {
-        "ID_Rol":         rol.ID_Rol,
-        "Rol":            rol.Rol,
-        "Icono":          rol.Icono,
-        "Fecha_creacion": rol.Fecha_creacion,
-        "protegido":      _es_protegido(rol.ID_Rol),
+        "ID_Rol":    rol.ID_Rol,
+        "Rol":       rol.Rol,
+        # FIX: Icono es LargeBinary → convertir a base64 string para que sea serializable
+        "Icono":     _icono_a_str(rol.Icono),
+        # FIX: eliminado "Fecha_creacion" — columna no existe en tabla Roles
+        "Estado":    rol.Estado,
+        "protegido": _es_protegido(rol.ID_Rol),
         "permisos": [
             {
                 "ID_Permiso":  p.ID_Permiso,
                 "Permiso":     p.Permiso,
                 "Descripcion": p.Descripcion,
-                "Estado":      p.Estado,
+                # FIX: eliminado "Estado": p.Estado — columna no existe en tabla Permisos
             }
             for p in permisos
         ],
@@ -45,7 +59,7 @@ def obtener_roles(db: Session, busqueda: str = None):
     roles = query.all()
     return {
         "total": len(roles),
-        "roles": [_formato_rol(r, db) for r in roles]
+        "roles": [_formato_rol(r, db) for r in roles],
     }
 
 
@@ -63,8 +77,10 @@ def crear_rol(db: Session, datos: RolCreate):
         raise HTTPException(status_code=400, detail="Ya existe un rol con ese nombre")
 
     nuevo = Rol(
-        Rol            = datos.Rol,
-        Icono          = datos.Icono,
+        Rol   = datos.Rol,
+        # FIX: eliminado Fecha_creacion = datetime.now() — columna no existe en Roles
+        # Icono llega como str (URL/emoji); si tu frontend manda base64, decodificar aquí:
+        Icono = datos.Icono.encode("utf-8") if datos.Icono else None,
     )
     db.add(nuevo)
     db.commit()
@@ -77,14 +93,20 @@ def editar_rol(db: Session, id_rol: int, datos: RolUpdate):
     if _es_protegido(id_rol):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Este rol está protegido y no puede editarse"
+            detail="Este rol está protegido y no puede editarse",
         )
 
     rol = db.query(Rol).filter(Rol.ID_Rol == id_rol).first()
     if not rol:
         raise HTTPException(status_code=404, detail="Rol no encontrado")
 
-    for campo, valor in datos.model_dump(exclude_none=True).items():
+    campos = datos.model_dump(exclude_none=True)
+
+    # Icono: si viene como str, guardar como bytes en LargeBinary
+    if "Icono" in campos and campos["Icono"] is not None:
+        campos["Icono"] = campos["Icono"].encode("utf-8")
+
+    for campo, valor in campos.items():
         setattr(rol, campo, valor)
 
     db.commit()
@@ -97,7 +119,7 @@ def cambiar_estado(db: Session, id_rol: int, nuevo_estado: int):
     if _es_protegido(id_rol):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Este rol está protegido y no puede modificarse"
+            detail="Este rol está protegido y no puede modificarse",
         )
 
     rol = db.query(Rol).filter(Rol.ID_Rol == id_rol).first()
@@ -115,7 +137,7 @@ def eliminar_rol(db: Session, id_rol: int):
     if _es_protegido(id_rol):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Este rol está protegido y no puede eliminarse"
+            detail="Este rol está protegido y no puede eliminarse",
         )
 
     rol = db.query(Rol).filter(Rol.ID_Rol == id_rol).first()
@@ -143,7 +165,9 @@ def asignar_permisos(db: Session, id_rol: int, permisos_ids: list[int]):
     for id_permiso in permisos_ids:
         permiso = db.query(Permiso).filter(Permiso.ID_Permiso == id_permiso).first()
         if not permiso:
-            raise HTTPException(status_code=404, detail=f"Permiso {id_permiso} no encontrado")
+            raise HTTPException(
+                status_code=404, detail=f"Permiso {id_permiso} no encontrado"
+            )
         db.add(RolXPermiso(ID_Rol=id_rol, ID_Permiso=id_permiso))
 
     db.commit()

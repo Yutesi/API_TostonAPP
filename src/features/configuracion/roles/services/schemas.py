@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
 
 
 # ── IDs de roles protegidos (no se pueden editar ni eliminar) ──
@@ -25,6 +24,7 @@ class RolEstado(BaseModel):
 
 
 # ── Respuesta de un permiso (para listar dentro del rol) ──
+# FIX: eliminado campo Estado — Permiso NO tiene columna Estado en BD
 class PermisoResponse(BaseModel):
     ID_Permiso:  int
     Permiso:     str
@@ -35,13 +35,15 @@ class PermisoResponse(BaseModel):
 
 
 # ── Respuesta de un rol ──
+# FIX: eliminado Fecha_creacion — Rol NO tiene esa columna en BD
+# FIX: Icono es Optional[str] porque en el service se convierte a None/base64, no bytes crudos
 class RolResponse(BaseModel):
-    ID_Rol:         int
-    Rol:            str
-    Icono:          Optional[str] = None
-    Estado:         Optional[int] = None
-    protegido:      bool = False            # calculado en el código
-    permisos:       list[PermisoResponse] = []
+    ID_Rol:    int
+    Rol:       str
+    Icono:     Optional[str] = None
+    Estado:    Optional[int] = None
+    protegido: bool = False
+    permisos:  list[PermisoResponse] = []
 
     class Config:
         from_attributes = True
@@ -55,4 +57,4 @@ class RolListResponse(BaseModel):
 
 # ── Asignar/quitar permisos a un rol ──
 class AsignarPermisos(BaseModel):
-    permisos_ids: list[int]     # lista de IDs de permisos a asignar
+    permisos_ids: list[int]
