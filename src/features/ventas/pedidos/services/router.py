@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import solo_empleados
+from src.features.auth.services.dependencies import requiere_permiso
 from .schemas import PedidoResponse, PedidoListResponse
 from .service import obtener_pedidos, obtener_pedido, confirmar_pedido, cancelar_pedido
 
@@ -16,12 +16,9 @@ def listar_pedidos(
     por_pagina: int           = Query(10, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
     db:         Session       = Depends(get_db),
-    _:          dict          = Depends(solo_empleados)
+    _:          dict          = Depends(requiere_permiso("ver_pedidos"))
 ):
-    """
-    Lista todos los pedidos pendientes de confirmar.
-    Busca por nombre del cliente.
-    """
+    """Lista todos los pedidos pendientes de confirmar. Busca por nombre del cliente."""
     return obtener_pedidos(db, pagina, por_pagina, busqueda)
 
 
@@ -29,7 +26,7 @@ def listar_pedidos(
 def ver_pedido(
     id_venta: int,
     db:       Session = Depends(get_db),
-    _:        dict    = Depends(solo_empleados)
+    _:        dict    = Depends(requiere_permiso("ver_pedidos"))
 ):
     """Retorna el detalle de un pedido pendiente."""
     return obtener_pedido(db, id_venta)
@@ -39,12 +36,9 @@ def ver_pedido(
 def confirmar(
     id_venta: int,
     db:       Session = Depends(get_db),
-    _:        dict    = Depends(solo_empleados)
+    _:        dict    = Depends(requiere_permiso("editar_pedidos"))
 ):
-    """
-    Confirma el pedido → se convierte en venta pagada.
-    Estado cambia a Confirmado.
-    """
+    """Confirma el pedido → estado Confirmado."""
     return confirmar_pedido(db, id_venta)
 
 
@@ -52,12 +46,7 @@ def confirmar(
 def cancelar(
     id_venta: int,
     db:       Session = Depends(get_db),
-    _:        dict    = Depends(solo_empleados)
+    _:        dict    = Depends(requiere_permiso("editar_pedidos"))
 ):
-    """
-    Cancela el pedido.
-    - Devuelve el stock de productos al inventario.
-    - Si se usó crédito, lo devuelve al cliente.
-    - Estado cambia a Cancelado.
-    """
+    """Cancela el pedido. Devuelve stock y crédito si aplica."""
     return cancelar_pedido(db, id_venta)

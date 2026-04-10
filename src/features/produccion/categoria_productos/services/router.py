@@ -3,18 +3,14 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import solo_empleados
+from src.features.auth.services.dependencies import requiere_permiso
 from .schemas import (
     CategoriaProductoCreate, CategoriaProductoUpdate, CategoriaProductoEstado,
     CategoriaProductoResponse, CategoriaProductoListResponse
 )
 from .service import (
-    obtener_categorias,
-    obtener_categoria,
-    crear_categoria,
-    editar_categoria,
-    cambiar_estado,
-    eliminar_categoria
+    obtener_categorias, obtener_categoria, crear_categoria,
+    editar_categoria, cambiar_estado, eliminar_categoria
 )
 
 router = APIRouter(prefix="/categoria-productos", tags=["Categorías de Productos"])
@@ -26,9 +22,9 @@ def listar_categorias(
     por_pagina: int           = Query(10, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
     db:         Session       = Depends(get_db),
-    _:          dict          = Depends(solo_empleados)
+    _:          dict          = Depends(requiere_permiso("ver_productos"))
 ):
-    """Lista paginada de categorías con sus productos. Busca por nombre o descripción."""
+    """Lista paginada de categorías con sus productos."""
     return obtener_categorias(db, pagina, por_pagina, busqueda)
 
 
@@ -36,7 +32,7 @@ def listar_categorias(
 def ver_categoria(
     id_categoria: int,
     db:           Session = Depends(get_db),
-    _:            dict    = Depends(solo_empleados)
+    _:            dict    = Depends(requiere_permiso("ver_productos"))
 ):
     """Retorna el detalle de una categoría con todos sus productos."""
     return obtener_categoria(db, id_categoria)
@@ -46,7 +42,7 @@ def ver_categoria(
 def agregar_categoria(
     datos: CategoriaProductoCreate,
     db:    Session = Depends(get_db),
-    _:     dict    = Depends(solo_empleados)
+    _:     dict    = Depends(requiere_permiso("crear_productos"))
 ):
     """Crea una nueva categoría de productos."""
     return crear_categoria(db, datos)
@@ -57,7 +53,7 @@ def actualizar_categoria(
     id_categoria: int,
     datos:        CategoriaProductoUpdate,
     db:           Session = Depends(get_db),
-    _:            dict    = Depends(solo_empleados)
+    _:            dict    = Depends(requiere_permiso("editar_productos"))
 ):
     """Edita la categoría. Solo se actualizan los campos enviados."""
     return editar_categoria(db, id_categoria, datos)
@@ -68,7 +64,7 @@ def toggle_estado(
     id_categoria: int,
     datos:        CategoriaProductoEstado,
     db:           Session = Depends(get_db),
-    _:            dict    = Depends(solo_empleados)
+    _:            dict    = Depends(requiere_permiso("editar_productos"))
 ):
     """Cambia el estado ON/OFF de la categoría."""
     return cambiar_estado(db, id_categoria, datos.Estado)
@@ -78,10 +74,7 @@ def toggle_estado(
 def borrar_categoria(
     id_categoria: int,
     db:           Session = Depends(get_db),
-    _:            dict    = Depends(solo_empleados)
+    _:            dict    = Depends(requiere_permiso("eliminar_productos"))
 ):
-    """
-    Elimina la categoría. Los productos asociados quedan sin categoría
-    pero no se eliminan.
-    """
+    """Elimina la categoría. Los productos asociados quedan sin categoría pero no se eliminan."""
     return eliminar_categoria(db, id_categoria)

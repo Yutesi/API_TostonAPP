@@ -3,16 +3,11 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import solo_empleados
+from src.features.auth.services.dependencies import requiere_permiso
 from .schemas import ProductoCreate, ProductoUpdate, ProductoResponse, ProductoListResponse
 from .service import (
-    obtener_productos,
-    obtener_producto,
-    crear_producto,
-    editar_producto,
-    agregar_imagenes,
-    eliminar_imagen,
-    eliminar_producto
+    obtener_productos, obtener_producto, crear_producto,
+    editar_producto, agregar_imagenes, eliminar_imagen, eliminar_producto
 )
 
 router = APIRouter(prefix="/productos", tags=["Gestión de Productos"])
@@ -24,7 +19,7 @@ def listar_productos(
     por_pagina: int           = Query(10, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
     db:         Session       = Depends(get_db),
-    _:          dict          = Depends(solo_empleados)
+    _:          dict          = Depends(requiere_permiso("ver_productos"))
 ):
     """Lista paginada de productos. Busca por nombre o categoría."""
     return obtener_productos(db, pagina, por_pagina, busqueda)
@@ -34,7 +29,7 @@ def listar_productos(
 def ver_producto(
     id_producto: int,
     db:          Session = Depends(get_db),
-    _:           dict    = Depends(solo_empleados)
+    _:           dict    = Depends(requiere_permiso("ver_productos"))
 ):
     """Retorna el detalle de un producto con imágenes y ficha técnica."""
     return obtener_producto(db, id_producto)
@@ -44,12 +39,9 @@ def ver_producto(
 def agregar_producto(
     datos: ProductoCreate,
     db:    Session = Depends(get_db),
-    _:     dict    = Depends(solo_empleados)
+    _:     dict    = Depends(requiere_permiso("crear_productos"))
 ):
-    """
-    Crea un producto. El estado se calcula automáticamente según stock.
-    Opcionalmente crea la ficha técnica si se incluye en el body.
-    """
+    """Crea un producto. El estado se calcula automáticamente según stock."""
     return crear_producto(db, datos)
 
 
@@ -58,7 +50,7 @@ def actualizar_producto(
     id_producto: int,
     datos:       ProductoUpdate,
     db:          Session = Depends(get_db),
-    _:           dict    = Depends(solo_empleados)
+    _:           dict    = Depends(requiere_permiso("editar_productos"))
 ):
     """Edita el producto. El estado se recalcula automáticamente."""
     return editar_producto(db, id_producto, datos)
@@ -69,12 +61,9 @@ def subir_imagenes(
     id_producto: int,
     imagenes:    list[UploadFile] = File(...),
     db:          Session          = Depends(get_db),
-    _:           dict             = Depends(solo_empleados)
+    _:           dict             = Depends(requiere_permiso("editar_productos"))
 ):
-    """
-    Sube una o varias imágenes al producto.
-    Enviar como multipart/form-data con el campo 'imagenes'.
-    """
+    """Sube una o varias imágenes al producto (multipart/form-data)."""
     return agregar_imagenes(db, id_producto, imagenes)
 
 
@@ -83,7 +72,7 @@ def borrar_imagen(
     id_producto: int,
     id_imagen:   int,
     db:          Session = Depends(get_db),
-    _:           dict    = Depends(solo_empleados)
+    _:           dict    = Depends(requiere_permiso("editar_productos"))
 ):
     """Elimina una imagen específica del producto."""
     return eliminar_imagen(db, id_imagen)
@@ -93,7 +82,7 @@ def borrar_imagen(
 def borrar_producto(
     id_producto: int,
     db:          Session = Depends(get_db),
-    _:           dict    = Depends(solo_empleados)
+    _:           dict    = Depends(requiere_permiso("eliminar_productos"))
 ):
     """Elimina el producto junto con sus imágenes y ficha técnica."""
     return eliminar_producto(db, id_producto)

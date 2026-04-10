@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import solo_empleados
+from src.features.auth.services.dependencies import requiere_permiso
 from .schemas import (
     DevolucionCreate, DevolucionResolucion,
     DevolucionResponse, DevolucionListResponse
@@ -22,7 +22,7 @@ def listar_devoluciones(
     por_pagina: int           = Query(10, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
     db:         Session       = Depends(get_db),
-    _:          dict          = Depends(solo_empleados)
+    _:          dict          = Depends(requiere_permiso("ver_devoluciones"))
 ):
     """Lista paginada de devoluciones. Busca por nombre del cliente."""
     return obtener_devoluciones(db, pagina, por_pagina, busqueda)
@@ -32,7 +32,7 @@ def listar_devoluciones(
 def ver_devolucion(
     id_devolucion: int,
     db:            Session = Depends(get_db),
-    _:             dict    = Depends(solo_empleados)
+    _:             dict    = Depends(requiere_permiso("ver_devoluciones"))
 ):
     """Retorna el detalle de una devolución con sus productos."""
     return obtener_devolucion(db, id_devolucion)
@@ -42,12 +42,9 @@ def ver_devolucion(
 def registrar_devolucion(
     datos: DevolucionCreate,
     db:    Session = Depends(get_db),
-    _:     dict    = Depends(solo_empleados)
+    _:     dict    = Depends(requiere_permiso("crear_devoluciones"))
 ):
-    """
-    Registra una devolución desde una venta existente.
-    El total se calcula automáticamente. Estado inicial: Pendiente.
-    """
+    """Registra una devolución. El total se calcula automáticamente. Estado inicial: Pendiente."""
     return crear_devolucion(db, datos)
 
 
@@ -56,11 +53,7 @@ def aprobar_rechazar(
     id_devolucion: int,
     datos:         DevolucionResolucion,
     db:            Session = Depends(get_db),
-    _:             dict    = Depends(solo_empleados)
+    _:             dict    = Depends(requiere_permiso("editar_devoluciones"))
 ):
-    """
-    Aprueba o rechaza la devolución.
-    Si se aprueba → el crédito del cliente se recarga automáticamente.
-    No se puede resolver una devolución ya resuelta.
-    """
+    """Aprueba o rechaza la devolución. Si se aprueba → recarga crédito automáticamente."""
     return resolver_devolucion(db, id_devolucion, datos)

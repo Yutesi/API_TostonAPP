@@ -3,16 +3,11 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import solo_empleados
+from src.features.auth.services.dependencies import requiere_permiso
 from .schemas import RolCreate, RolUpdate, RolEstado, AsignarPermisos, RolResponse, RolListResponse
 from .service import (
-    obtener_roles,
-    obtener_rol,
-    crear_rol,
-    editar_rol,
-    cambiar_estado,
-    eliminar_rol,
-    asignar_permisos
+    obtener_roles, obtener_rol, crear_rol,
+    editar_rol, cambiar_estado, eliminar_rol, asignar_permisos
 )
 
 router = APIRouter(prefix="/roles", tags=["Roles y Permisos"])
@@ -22,7 +17,7 @@ router = APIRouter(prefix="/roles", tags=["Roles y Permisos"])
 def listar_roles(
     busqueda: Optional[str] = Query(None),
     db:       Session       = Depends(get_db),
-    _:        dict          = Depends(solo_empleados)
+    _:        dict          = Depends(requiere_permiso("ver_usuarios"))
 ):
     """Lista todos los roles. Soporta búsqueda por nombre."""
     return obtener_roles(db, busqueda)
@@ -32,7 +27,7 @@ def listar_roles(
 def ver_rol(
     id_rol: int,
     db:     Session = Depends(get_db),
-    _:      dict    = Depends(solo_empleados)
+    _:      dict    = Depends(requiere_permiso("ver_usuarios"))
 ):
     """Retorna el detalle de un rol con sus permisos."""
     return obtener_rol(db, id_rol)
@@ -42,7 +37,7 @@ def ver_rol(
 def agregar_rol(
     datos: RolCreate,
     db:    Session = Depends(get_db),
-    _:     dict    = Depends(solo_empleados)
+    _:     dict    = Depends(requiere_permiso("crear_usuarios"))
 ):
     """Crea un nuevo rol."""
     return crear_rol(db, datos)
@@ -53,7 +48,7 @@ def actualizar_rol(
     id_rol: int,
     datos:  RolUpdate,
     db:     Session = Depends(get_db),
-    _:      dict    = Depends(solo_empleados)
+    _:      dict    = Depends(requiere_permiso("editar_usuarios"))
 ):
     """Edita el nombre o ícono de un rol. Roles protegidos retornan 403."""
     return editar_rol(db, id_rol, datos)
@@ -64,7 +59,7 @@ def toggle_estado(
     id_rol: int,
     datos:  RolEstado,
     db:     Session = Depends(get_db),
-    _:      dict    = Depends(solo_empleados)
+    _:      dict    = Depends(requiere_permiso("editar_usuarios"))
 ):
     """Cambia el estado ON/OFF de un rol."""
     return cambiar_estado(db, id_rol, datos.Estado)
@@ -74,7 +69,7 @@ def toggle_estado(
 def borrar_rol(
     id_rol: int,
     db:     Session = Depends(get_db),
-    _:      dict    = Depends(solo_empleados)
+    _:      dict    = Depends(requiere_permiso("eliminar_usuarios"))
 ):
     """Elimina un rol. Roles protegidos retornan 403."""
     return eliminar_rol(db, id_rol)
@@ -85,10 +80,7 @@ def gestionar_permisos(
     id_rol: int,
     datos:  AsignarPermisos,
     db:     Session = Depends(get_db),
-    _:      dict    = Depends(solo_empleados)
+    _:      dict    = Depends(requiere_permiso("editar_usuarios"))
 ):
-    """
-    Reemplaza los permisos del rol con la lista enviada.
-    Para quitar todos los permisos enviar: { 'permisos_ids': [] }
-    """
+    """Reemplaza los permisos del rol con la lista enviada."""
     return asignar_permisos(db, id_rol, datos.permisos_ids)

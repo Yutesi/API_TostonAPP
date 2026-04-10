@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import solo_empleados
+from src.features.auth.services.dependencies import requiere_permiso
 from .schemas import VentaCreate, VentaEstado, VentaResponse, VentaListResponse
 from .service import obtener_ventas, obtener_venta, crear_venta, cambiar_estado
 
@@ -16,7 +16,7 @@ def listar_ventas(
     por_pagina: int           = Query(10, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
     db:         Session       = Depends(get_db),
-    _:          dict          = Depends(solo_empleados)
+    _:          dict          = Depends(requiere_permiso("ver_ventas"))
 ):
     """Lista paginada de ventas. Busca por nombre del cliente."""
     return obtener_ventas(db, pagina, por_pagina, busqueda)
@@ -26,7 +26,7 @@ def listar_ventas(
 def ver_venta(
     id_venta: int,
     db:       Session = Depends(get_db),
-    _:        dict    = Depends(solo_empleados)
+    _:        dict    = Depends(requiere_permiso("ver_ventas"))
 ):
     """Retorna el detalle completo de una venta con productos, crédito y descuento."""
     return obtener_venta(db, id_venta)
@@ -36,13 +36,13 @@ def ver_venta(
 def registrar_venta(
     datos: VentaCreate,
     db:    Session = Depends(get_db),
-    _:     dict    = Depends(solo_empleados)
+    _:     dict    = Depends(requiere_permiso("crear_ventas"))
 ):
     """
     Crea una venta aplicando el flujo completo:
     1. Valida stock de productos
     2. Aplica crédito del cliente si usar_credito=true
-    3. Aplica descuento si queda saldo (cupón, emisión o antigüedad)
+    3. Aplica descuento si queda saldo
     4. Descuenta stock automáticamente
     5. Crea domicilio si se incluye en el body
     """
@@ -54,7 +54,7 @@ def actualizar_estado(
     id_venta: int,
     datos:    VentaEstado,
     db:       Session = Depends(get_db),
-    _:        dict    = Depends(solo_empleados)
+    _:        dict    = Depends(requiere_permiso("editar_ventas"))
 ):
     """Cambia el estado de la venta."""
     return cambiar_estado(db, id_venta, datos.Estado)

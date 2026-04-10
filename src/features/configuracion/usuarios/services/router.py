@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import solo_empleados
+from src.features.auth.services.dependencies import requiere_permiso
 from .schemas import EmpleadoCreate, UsuarioCreate, PersonaUpdate, PersonaEstado, PersonaResponse, PersonaListResponse
 from .service import (
     obtener_todos, obtener_persona, crear_empleado,
@@ -19,7 +19,7 @@ def listar_todos(
     por_pagina: int           = Query(10, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
     db:         Session       = Depends(get_db),
-    _:          dict          = Depends(solo_empleados)
+    _:          dict          = Depends(requiere_permiso("ver_usuarios"))
 ):
     """Lista paginada de empleados + clientes. Busca por nombre, correo o cédula."""
     return obtener_todos(db, pagina, por_pagina, busqueda)
@@ -30,7 +30,7 @@ def ver_persona(
     id_persona: int,
     tipo:       str,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("ver_usuarios"))
 ):
     """Retorna el detalle. tipo puede ser 'empleado' o 'cliente'."""
     return obtener_persona(db, id_persona, tipo)
@@ -40,7 +40,7 @@ def ver_persona(
 def agregar_empleado(
     datos: EmpleadoCreate,
     db:    Session = Depends(get_db),
-    _:     dict    = Depends(solo_empleados)
+    _:     dict    = Depends(requiere_permiso("crear_usuarios"))
 ):
     return crear_empleado(db, datos)
 
@@ -49,7 +49,7 @@ def agregar_empleado(
 def agregar_cliente(
     datos: UsuarioCreate,
     db:    Session = Depends(get_db),
-    _:     dict    = Depends(solo_empleados)
+    _:     dict    = Depends(requiere_permiso("crear_usuarios"))
 ):
     return crear_cliente(db, datos)
 
@@ -60,7 +60,7 @@ def actualizar_persona(
     tipo:       str,
     datos:      PersonaUpdate,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("editar_usuarios"))
 ):
     return editar_persona(db, id_persona, tipo, datos)
 
@@ -71,7 +71,7 @@ def toggle_estado(
     tipo:       str,
     datos:      PersonaEstado,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("editar_usuarios"))
 ):
     return cambiar_estado(db, id_persona, tipo, datos.Estado)
 
@@ -81,6 +81,6 @@ def borrar_persona(
     id_persona: int,
     tipo:       str,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("eliminar_usuarios"))
 ):
     return eliminar_persona(db, id_persona, tipo)

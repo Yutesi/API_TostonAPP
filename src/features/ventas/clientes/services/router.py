@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import solo_empleados
+from src.features.auth.services.dependencies import requiere_permiso
 from .schemas import ClienteCreate, ClienteUpdate, ClienteEstado, ClienteResponse, ClienteListResponse
 from .service import (
     obtener_clientes, obtener_cliente, crear_cliente,
@@ -20,7 +20,7 @@ def listar_clientes(
     por_pagina: int           = Query(10, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
     db:         Session       = Depends(get_db),
-    _:          dict          = Depends(solo_empleados)
+    _:          dict          = Depends(requiere_permiso("ver_usuarios"))
 ):
     return obtener_clientes(db, pagina, por_pagina, busqueda)
 
@@ -29,7 +29,7 @@ def listar_clientes(
 def ver_cliente(
     id_usuario: int,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("ver_usuarios"))
 ):
     return obtener_cliente(db, id_usuario)
 
@@ -38,7 +38,7 @@ def ver_cliente(
 def ver_foto(
     id_usuario: int,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("ver_usuarios"))
 ):
     foto = obtener_foto(db, id_usuario)
     return Response(content=foto, media_type="image/jpeg")
@@ -48,7 +48,7 @@ def ver_foto(
 def agregar_cliente(
     datos: ClienteCreate,
     db:    Session = Depends(get_db),
-    _:     dict    = Depends(solo_empleados)
+    _:     dict    = Depends(requiere_permiso("crear_usuarios"))
 ):
     return crear_cliente(db, datos)
 
@@ -58,7 +58,7 @@ def actualizar_cliente(
     id_usuario: int,
     datos:      ClienteUpdate,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("editar_usuarios"))
 ):
     return editar_cliente(db, id_usuario, datos)
 
@@ -68,7 +68,7 @@ def toggle_estado(
     id_usuario: int,
     datos:      ClienteEstado,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("editar_usuarios"))
 ):
     return cambiar_estado(db, id_usuario, datos.Estado)
 
@@ -78,7 +78,7 @@ def actualizar_foto(
     id_usuario: int,
     foto:       UploadFile = File(...),
     db:         Session    = Depends(get_db),
-    _:          dict       = Depends(solo_empleados)
+    _:          dict       = Depends(requiere_permiso("editar_usuarios"))
 ):
     return subir_foto(db, id_usuario, foto)
 
@@ -87,6 +87,6 @@ def actualizar_foto(
 def borrar_cliente(
     id_usuario: int,
     db:         Session = Depends(get_db),
-    _:          dict    = Depends(solo_empleados)
+    _:          dict    = Depends(requiere_permiso("eliminar_usuarios"))
 ):
     return eliminar_cliente(db, id_usuario)

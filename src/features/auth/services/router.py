@@ -75,33 +75,24 @@ def obtener_perfil(actual: dict = Depends(obtener_usuario_actual)):
 @router.post("/recuperar-contrasena", response_model=RecuperarContrasenaResponse)
 def recuperar_contrasena(datos: RecuperarContrasenaInput, db: Session = Depends(get_db)):
     """
-    Genera un token de recuperación de contraseña válido por 15 minutos.
-
-    MODO ACTUAL (sin email): el token se retorna directamente en la respuesta.
-    MODO FUTURO (con email): el token se enviará al correo y este endpoint
-    retornará solo { "mensaje": "...", "reset_token": "" }.
+    Genera un token de recuperación válido por 15 minutos.
+    MODO ACTUAL: el token se retorna en la respuesta.
+    MODO FUTURO: se enviará por correo y reset_token será vacío.
     """
     token = solicitar_recuperacion(db, datos.correo)
-
     return RecuperarContrasenaResponse(
         mensaje     = "Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.",
-        reset_token = token,   # ← ELIMINAR cuando se integre el servicio de email
+        reset_token = token,
     )
 
 
 @router.post("/resetear-contrasena", response_model=ResetearContrasenaResponse)
 def resetear(datos: ResetearContrasenaInput, db: Session = Depends(get_db)):
-    """
-    Recibe el token de recuperación y la nueva contraseña.
-    Actualiza la contraseña si el token es válido y no ha expirado.
-    """
+    """Recibe el token y la nueva contraseña. Actualiza si el token es válido."""
     try:
         resetear_contrasena(db, datos.token, datos.nueva_contrasena)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return ResetearContrasenaResponse(
         mensaje="Contraseña actualizada correctamente. Ya puedes iniciar sesión."
