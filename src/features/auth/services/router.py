@@ -5,6 +5,7 @@ from src.shared.services.database import get_db
 from .schemas import (
     LoginInput,
     TokenResponse,
+    RegistroInput,
     RecuperarContrasenaInput,
     RecuperarContrasenaResponse,
     ResetearContrasenaInput,
@@ -14,6 +15,7 @@ from .service import (
     autenticar,
     crear_token,
     obtener_nombre_rol,
+    registrar_cliente,
     solicitar_recuperacion,
     resetear_contrasena,
 )
@@ -39,11 +41,7 @@ def login(datos: LoginInput, db: Session = Depends(get_db)):
 
     id_persona = registro.ID_Empleado if tipo == "empleado" else registro.ID_Usuario
 
-    token = crear_token({
-        "id":   id_persona,
-        "tipo": tipo,
-        "rol":  nombre_rol
-    })
+    token = crear_token({"id": id_persona, "tipo": tipo, "rol": nombre_rol})
 
     return TokenResponse(
         access_token = token,
@@ -52,6 +50,27 @@ def login(datos: LoginInput, db: Session = Depends(get_db)):
         nombre       = registro.Nombre,
         apellidos    = registro.Apellidos,
         rol          = nombre_rol
+    )
+
+
+@router.post("/registro", response_model=TokenResponse, status_code=201)
+def registro(datos: RegistroInput, db: Session = Depends(get_db)):
+    """
+    Registro de nuevo cliente.
+    Crea la cuenta y retorna el token de sesión directamente.
+    Campos requeridos: Nombre, Apellidos, Correo, Contrasena, Confirmar_contrasena.
+    """
+    nuevo = registrar_cliente(db, datos)
+
+    token = crear_token({"id": nuevo.ID_Usuario, "tipo": "usuario", "rol": None})
+
+    return TokenResponse(
+        access_token = token,
+        tipo         = "usuario",
+        cedula       = nuevo.ID_Usuario,
+        nombre       = nuevo.Nombre,
+        apellidos    = nuevo.Apellidos,
+        rol          = None
     )
 
 

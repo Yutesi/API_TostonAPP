@@ -20,8 +20,7 @@ def _formato_venta(venta: Venta, db: Session) -> dict:
     """Construye la respuesta completa de una venta."""
     usuario = db.query(Usuario).filter(Usuario.ID_Usuario == venta.ID_Usuario).first()
 
-    # Productos de la venta
-    vxp      = db.query(VentaXProducto).filter(VentaXProducto.ID_Venta == venta.ID_Venta).all()
+    vxp       = db.query(VentaXProducto).filter(VentaXProducto.ID_Venta == venta.ID_Venta).all()
     productos = []
     for v in vxp:
         producto = db.query(Producto).filter(Producto.ID_Producto == v.ID_Producto).first()
@@ -34,19 +33,15 @@ def _formato_venta(venta: Venta, db: Session) -> dict:
             "subtotal":        precio * Decimal(str(v.Cantidad)),
         })
 
-    # Detalle de venta (crédito y descuento aplicados)
-    detalle          = db.query(DetalleVenta).filter(DetalleVenta.ID_Venta == venta.ID_Venta).first()
-    credito_aplicado = detalle.Descuento if detalle else Decimal("0")   # crédito va en Descuento
-    iva              = detalle.IVA if detalle else Decimal("0")
+    detalle            = db.query(DetalleVenta).filter(DetalleVenta.ID_Venta == venta.ID_Venta).first()
+    credito_aplicado   = detalle.Descuento if detalle else Decimal("0")
+    iva                = detalle.IVA if detalle else Decimal("0")
 
-    # Descuento aplicado
-    dxv              = db.query(DescuentoXVenta).filter(DescuentoXVenta.ID_Venta == venta.ID_Venta).first()
+    dxv                = db.query(DescuentoXVenta).filter(DescuentoXVenta.ID_Venta == venta.ID_Venta).first()
     descuento_aplicado = dxv.Monto_Aplicado if dxv else Decimal("0")
 
-    # Domicilio asociado
-    domicilio        = db.query(Domicilio).filter(Domicilio.ID_Venta == venta.ID_Venta).first()
-
-    subtotal_bruto   = sum(p["subtotal"] for p in productos)
+    domicilio      = db.query(Domicilio).filter(Domicilio.ID_Venta == venta.ID_Venta).first()
+    subtotal_bruto = sum(p["subtotal"] for p in productos)
 
     return {
         "ID_Venta":           venta.ID_Venta,
@@ -68,10 +63,6 @@ def _formato_venta(venta: Venta, db: Session) -> dict:
 
 
 def _aplicar_credito(db: Session, id_usuario: int, monto_restante: Decimal, id_venta: int) -> Decimal:
-    """
-    Descuenta el saldo disponible del cliente.
-    Retorna cuánto crédito se usó.
-    """
     credito = db.query(CreditoCliente).filter(
         CreditoCliente.ID_Usuario == id_usuario
     ).first()
@@ -79,7 +70,7 @@ def _aplicar_credito(db: Session, id_usuario: int, monto_restante: Decimal, id_v
     if not credito or credito.Saldo <= 0:
         return Decimal("0")
 
-    credito_usado = min(credito.Saldo, monto_restante)
+    credito_usado        = min(credito.Saldo, monto_restante)
     credito.Saldo       -= credito_usado
     credito.Fecha_Update = datetime.now()
 
@@ -101,27 +92,19 @@ def _aplicar_descuento(
     monto_restante: Decimal,
     id_venta: int
 ) -> Decimal:
-    """
-    Busca y aplica un descuento válido.
-    Prioridad: cupón > emisión > antigüedad.
-    Retorna el monto descontado.
-    """
     descuento = None
 
-    # 1. Busca cupón por código
     if codigo:
         descuento = db.query(Descuento).filter(
             Descuento.Codigo == codigo,
             Descuento.Estado == 1,
         ).first()
         if descuento:
-            # Verifica vencimiento y usos
             if descuento.Fecha_Fin and descuento.Fecha_Fin < datetime.now():
                 raise HTTPException(status_code=400, detail="El cupón ha vencido")
             if descuento.Usos_Max and descuento.Usos_Actuales >= descuento.Usos_Max:
                 raise HTTPException(status_code=400, detail="El cupón ha alcanzado su límite de usos")
 
-    # 2. Si no hay cupón, busca descuento de emisión asignado al usuario
     if not descuento:
         asignacion = db.query(DescuentoXUsuario).filter(
             DescuentoXUsuario.ID_Usuario == id_usuario,
@@ -133,11 +116,10 @@ def _aplicar_descuento(
                 Descuento.ID_Descuento == asignacion.ID_Descuento
             ).first()
 
-    # 3. Si no hay emisión, busca descuento por antigüedad
     if not descuento:
         usuario = db.query(Usuario).filter(Usuario.ID_Usuario == id_usuario).first()
         if usuario and usuario.Fecha_creacion:
-            meses = (datetime.now() - usuario.Fecha_creacion).days // 30
+            meses     = (datetime.now() - usuario.Fecha_creacion).days // 30
             descuento = (
                 db.query(Descuento)
                 .filter(
@@ -145,7 +127,7 @@ def _aplicar_descuento(
                     Descuento.Meses_Minimos <= meses,
                     Descuento.Estado        == 1,
                 )
-                .order_by(Descuento.Porcentaje.desc())  # aplica el mayor
+                .order_by(Descuento.Porcentaje.desc())
                 .first()
             )
 
@@ -154,17 +136,14 @@ def _aplicar_descuento(
 
     monto_descontado = (monto_restante * descuento.Porcentaje / 100).quantize(Decimal("0.01"))
 
-    # Registra el descuento aplicado en la venta
     db.add(DescuentoXVenta(
         ID_Venta       = id_venta,
         ID_Descuento   = descuento.ID_Descuento,
         Monto_Aplicado = monto_descontado,
     ))
 
-    # Actualiza usos del descuento
     descuento.Usos_Actuales += 1
 
-    # Marca como usado si es de emisión
     if descuento.Tipo == "emision":
         asignacion = db.query(DescuentoXUsuario).filter(
             DescuentoXUsuario.ID_Descuento == descuento.ID_Descuento,
@@ -219,15 +198,24 @@ def crear_venta(db: Session, datos: VentaCreate) -> dict:
     """
     Flujo completo de creación de venta:
     1. Valida cliente y productos
-    2. Calcula subtotal bruto
-    3. Aplica crédito si el cliente lo desea
-    4. Aplica descuento si queda saldo pendiente
-    5. Descuenta stock de productos
-    6. Crea domicilio si se solicitó
+    2. Si hay domicilio → verifica que el cliente tenga teléfono registrado
+    3. Calcula subtotal bruto
+    4. Aplica crédito si el cliente lo desea
+    5. Aplica descuento si queda saldo pendiente
+    6. Descuenta stock de productos
+    7. Crea domicilio si se solicitó
     """
     # Verifica cliente
-    if not db.query(Usuario).filter(Usuario.ID_Usuario == datos.ID_Usuario).first():
+    usuario = db.query(Usuario).filter(Usuario.ID_Usuario == datos.ID_Usuario).first()
+    if not usuario:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    # Si el pedido incluye domicilio, el cliente debe tener teléfono registrado
+    if datos.domicilio and not usuario.Telefono:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes registrar tu número de teléfono en tu perfil antes de solicitar un domicilio"
+        )
 
     # Valida productos y calcula subtotal
     subtotal_bruto = Decimal("0")
@@ -244,7 +232,6 @@ def crear_venta(db: Session, datos: VentaCreate) -> dict:
 
     ESTADO_PENDIENTE = 1
 
-    # Crea la venta con total provisional
     nueva_venta = Venta(
         ID_Usuario   = datos.ID_Usuario,
         Total        = subtotal_bruto,
@@ -256,7 +243,6 @@ def crear_venta(db: Session, datos: VentaCreate) -> dict:
     db.add(nueva_venta)
     db.flush()
 
-    # Registra los productos de la venta y descuenta stock
     for p in datos.productos:
         producto = db.query(Producto).filter(Producto.ID_Producto == p.ID_Producto).first()
         db.add(VentaXProducto(
@@ -266,16 +252,13 @@ def crear_venta(db: Session, datos: VentaCreate) -> dict:
         ))
         producto.Stock -= p.Cantidad
 
-    # Calcula total tras crédito y descuento
     monto_restante   = subtotal_bruto
     credito_aplicado = Decimal("0")
 
-    # Paso 1: aplica crédito si el cliente lo desea
     if datos.usar_credito:
         credito_aplicado = _aplicar_credito(db, datos.ID_Usuario, monto_restante, nueva_venta.ID_Venta)
         monto_restante  -= credito_aplicado
 
-    # Paso 2: aplica descuento solo si queda saldo pendiente
     descuento_aplicado = Decimal("0")
     if monto_restante > 0:
         descuento_aplicado = _aplicar_descuento(
@@ -283,22 +266,19 @@ def crear_venta(db: Session, datos: VentaCreate) -> dict:
         )
         monto_restante -= descuento_aplicado
 
-    # Actualiza el total final
     nueva_venta.Total = max(monto_restante, Decimal("0"))
 
-    # Crea el detalle de venta
     db.add(DetalleVenta(
         ID_Venta    = nueva_venta.ID_Venta,
         A_Nombre_De = datos.A_Nombre_De,
         IVA         = Decimal("0"),
-        Descuento   = credito_aplicado,     # crédito usado
+        Descuento   = credito_aplicado,
         SubTotal    = subtotal_bruto,
     ))
 
-    # Crea domicilio si se solicitó
     if datos.domicilio:
-        ESTADO_ASIGNADO  = 2
-        estado_dom       = ESTADO_ASIGNADO if datos.domicilio.ID_Empleado else ESTADO_PENDIENTE
+        ESTADO_ASIGNADO = 2
+        estado_dom      = ESTADO_ASIGNADO if datos.domicilio.ID_Empleado else ESTADO_PENDIENTE
         db.add(Domicilio(
             ID_Venta             = nueva_venta.ID_Venta,
             ID_Empleado          = datos.domicilio.ID_Empleado,

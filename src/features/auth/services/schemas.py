@@ -1,30 +1,45 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional
 from pydantic import Field
 
 
-# ── Lo que llega en el body del login ──
+# ── Login ──
 class LoginInput(BaseModel):
     correo:     str = Field(example="admin@empresa.com")
     contrasena: str = Field(example="Admin123@")
 
 
-# ── Lo que se guarda dentro del token JWT ──
+# ── Token interno ──
 class TokenData(BaseModel):
     cedula: Optional[int] = None
-    tipo:   Optional[str] = None    # "usuario" o "empleado"
+    tipo:   Optional[str] = None
     rol:    Optional[str] = None
 
 
-# ── Lo que se retorna al frontend después del login ──
+# ── Respuesta de login / registro ──
 class TokenResponse(BaseModel):
     access_token: str
     token_type:   str = "bearer"
-    tipo:         str                   # "usuario" o "empleado"
+    tipo:         str
     cedula:       int
     nombre:       str
     apellidos:    str
-    rol:          Optional[str] = None  # Solo viene si es empleado
+    rol:          Optional[str] = None
+
+
+# ── Registro nuevo cliente ──
+class RegistroInput(BaseModel):
+    Nombre:               str = Field(example="Ana")
+    Apellidos:            str = Field(example="García")
+    Correo:               str = Field(example="ana@gmail.com")
+    Contrasena:           str = Field(example="MiClave123@")
+    Confirmar_contrasena: str = Field(example="MiClave123@")
+
+    @model_validator(mode="after")
+    def validar_contrasenas(self):
+        if self.Contrasena != self.Confirmar_contrasena:
+            raise ValueError("Las contraseñas no coinciden")
+        return self
 
 
 # ── Recuperación de contraseña ──
@@ -34,7 +49,6 @@ class RecuperarContrasenaInput(BaseModel):
 
 class RecuperarContrasenaResponse(BaseModel):
     mensaje:     str
-    # TEMPORAL — en producción este token viajará por correo, no en la respuesta
     reset_token: str
 
 
