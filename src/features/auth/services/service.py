@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 
-from src.shared.services.models import Usuario, Empleado, Rol
+from src.shared.services.models import Usuario, Empleado, Rol, UsuarioXRol
 
 load_dotenv()
 
@@ -102,12 +102,19 @@ def autenticar(db: Session, correo: str, contrasena: str):
 
 def registrar_cliente(db: Session, datos) -> Usuario:
     """
-    Crea un nuevo usuario (cliente) con los datos mínimos.
+    Crea un nuevo usuario (cliente) con los datos mínimos
+    y le asigna automáticamente el rol Cliente en Usuario_x_Rol.
     Los campos opcionales quedan null hasta que complete su perfil.
     """
     if buscar_por_correo(db, datos.Correo)[0]:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
+    # Verificar que el rol Cliente existe en BD
+    rol_cliente = db.query(Rol).filter(Rol.Rol == "Cliente").first()
+    if not rol_cliente:
+        raise HTTPException(status_code=500, detail="Rol Cliente no encontrado en el sistema")
+
+    # Crear el usuario
     nuevo = Usuario(
         Nombre         = datos.Nombre,
         Apellidos      = datos.Apellidos,
@@ -123,6 +130,14 @@ def registrar_cliente(db: Session, datos) -> Usuario:
         Telefono       = None,
     )
     db.add(nuevo)
+    db.flush()  # genera el ID_Usuario sin hacer commit aún
+
+    # Asignar rol Cliente automáticamente
+    db.add(UsuarioXRol(
+        ID_Rol     = rol_cliente.ID_Rol,
+        ID_Usuario = nuevo.ID_Usuario,
+    ))
+
     db.commit()
     db.refresh(nuevo)
     return nuevo
