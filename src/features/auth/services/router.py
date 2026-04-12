@@ -20,6 +20,7 @@ from .service import (
     resetear_contrasena,
 )
 from .dependencies import obtener_usuario_actual
+from src.shared.services.models import UsuarioXRol
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -57,12 +58,16 @@ def login(datos: LoginInput, db: Session = Depends(get_db)):
 def registro(datos: RegistroInput, db: Session = Depends(get_db)):
     """
     Registro de nuevo cliente.
-    Crea la cuenta y retorna el token de sesión directamente.
-    Campos requeridos: Nombre, Apellidos, Correo, Contrasena, Confirmar_contrasena.
+    Crea la cuenta, asigna rol Cliente automáticamente
+    y retorna el token de sesión directamente.
     """
     nuevo = registrar_cliente(db, datos)
 
-    token = crear_token({"id": nuevo.ID_Usuario, "tipo": "usuario", "rol": None})
+    # Leer el rol asignado desde Usuario_x_Rol
+    uxr        = db.query(UsuarioXRol).filter(UsuarioXRol.ID_Usuario == nuevo.ID_Usuario).first()
+    nombre_rol = obtener_nombre_rol(db, uxr.ID_Rol) if uxr else None
+
+    token = crear_token({"id": nuevo.ID_Usuario, "tipo": "usuario", "rol": nombre_rol})
 
     return TokenResponse(
         access_token = token,
@@ -70,7 +75,7 @@ def registro(datos: RegistroInput, db: Session = Depends(get_db)):
         cedula       = nuevo.ID_Usuario,
         nombre       = nuevo.Nombre,
         apellidos    = nuevo.Apellidos,
-        rol          = None
+        rol          = nombre_rol
     )
 
 
