@@ -4,21 +4,29 @@ from datetime import datetime
 from decimal import Decimal
 
 from src.shared.services.models import (
-    Devolucion, DevolucionDetalle, Venta, Usuario,
-    Producto, Estado, CreditoCliente, MovimientoCredito
+    Devolucion, DevolucionDetalle, Venta, VentaXProducto, Usuario,
+    Producto, CreditoCliente, MovimientoCredito
 )
-from .schemas import DevolucionCreate, DevolucionResolucion, DevolucionReembolso
+from .schemas import DevolucionCreate, DevolucionResolucion
 
+# ── Estados de devoluciones (no dependen de la tabla Estados compartida) ──────
+ESTADO_PENDIENTE = 1
+ESTADO_APROBADA  = 2
+ESTADO_RECHAZADA = 3
 
-def _label_estado(db: Session, id_estado: int) -> str:
-    estado = db.query(Estado).filter(Estado.ID_Estados == id_estado).first()
-    return estado.Estado if estado else None
+_ESTADO_LABELS = {
+    ESTADO_PENDIENTE: "Pendiente",
+    ESTADO_APROBADA:  "Aprobada",
+    ESTADO_RECHAZADA: "Rechazada",
+}
+
+# Estado de venta que permite devolucion
+VENTA_ENTREGADA = 4
 
 
 def _formato_devolucion(dev: Devolucion, db: Session) -> dict:
-    usuario = db.query(Usuario).filter(Usuario.ID_Usuario == dev.ID_Usuario).first()
-
-    detalles  = db.query(DevolucionDetalle).filter(
+    usuario  = db.query(Usuario).filter(Usuario.ID_Usuario == dev.ID_Usuario).first()
+    detalles = db.query(DevolucionDetalle).filter(
         DevolucionDetalle.ID_Devolucion == dev.ID_Devolucion
     ).all()
 
@@ -43,7 +51,7 @@ def _formato_devolucion(dev: Devolucion, db: Session) -> dict:
         "FechaDevolucion": dev.FechaDevolucion,
         "Motivo":          dev.Motivo,
         "Estado":          dev.Estado,
-        "estado_label":    _label_estado(db, dev.Estado) if dev.Estado else None,
+        "estado_label":    _ESTADO_LABELS.get(dev.Estado, "Desconocido"),
         "TotalDevuelto":   dev.TotalDevuelto,
         "FechaAprobacion": dev.FechaAprobacion,
         "FechaReembolso":  dev.FechaReembolso,
@@ -54,16 +62,12 @@ def _formato_devolucion(dev: Devolucion, db: Session) -> dict:
 
 
 def _recargar_credito(db: Session, id_usuario: int, monto: Decimal, id_devolucion: int):
-    """
-    Cuando se aprueba una devolución, recarga el crédito del cliente.
-    Si no tiene cuenta de crédito, la crea automáticamente.
-    """
+    """Recarga crédito al cliente cuando se aprueba la devolución."""
     credito = db.query(CreditoCliente).filter(
         CreditoCliente.ID_Usuario == id_usuario
     ).first()
 
     if not credito:
-        # Primera devolución del cliente, se crea su cuenta de crédito
         credito = CreditoCliente(
             ID_Usuario   = id_usuario,
             Saldo        = Decimal("0"),
@@ -72,11 +76,9 @@ def _recargar_credito(db: Session, id_usuario: int, monto: Decimal, id_devolucio
         db.add(credito)
         db.flush()
 
-    # Suma el monto al saldo
     credito.Saldo        += monto
     credito.Fecha_Update  = datetime.now()
 
-    # Registra el movimiento en el historial
     db.add(MovimientoCredito(
         ID_Credito    = credito.ID_Credito,
         ID_Devolucion = id_devolucion,
@@ -91,13 +93,17 @@ def obtener_mis_devoluciones(
     db: Session,
     id_usuario: int,
     pagina: int = 1,
-    por_pagina: int = 10,
+    por_pagina: int = 20,
 ) -> dict:
-    """Retorna solo las devoluciones del cliente autenticado."""
-    query        = db.query(Devolucion).filter(Devolucion.ID_Usuario == id_usuario)
+    """Retorna las devoluciones del cliente autenticado, más recientes primero."""
+    query = (
+        db.query(Devolucion)
+        .filter(Devolucion.ID_Usuario == id_usuario)
+        .order_by(Devolucion.FechaDevolucion.desc())
+    )
     total        = query.count()
     offset       = (pagina - 1) * por_pagina
-    devoluciones = query.order_by(Devolucion.FechaDevolucion.desc()).offset(offset).limit(por_pagina).all()
+    devoluciones = query.offset(offset).limit(por_pagina).all()
     return {
         "total":        total,
         "pagina":       pagina,
@@ -109,10 +115,15 @@ def obtener_mis_devoluciones(
 def obtener_devoluciones(
     db: Session,
     pagina: int = 1,
-    por_pagina: int = 10,
-    busqueda: str = None
+    por_pagina: int = 20,
+    busqueda: str = None,
+    estado: int = None,
 ) -> dict:
+    """Lista paginada para admin, más recientes primero. Filtra por nombre o estado."""
     query = db.query(Devolucion)
+
+    if estado:
+        query = query.filter(Devolucion.Estado == estado)
 
     if busqueda:
         termino      = f"%{busqueda}%"
@@ -126,6 +137,7 @@ def obtener_devoluciones(
         )
         query = query.filter(Devolucion.ID_Usuario.in_(usuarios_ids))
 
+    query        = query.order_by(Devolucion.FechaDevolucion.desc())
     total        = query.count()
     offset       = (pagina - 1) * por_pagina
     devoluciones = query.offset(offset).limit(por_pagina).all()
@@ -148,18 +160,73 @@ def obtener_devolucion(db: Session, id_devolucion: int) -> dict:
 
 
 def crear_devolucion(db: Session, datos: DevolucionCreate) -> dict:
-    if not db.query(Venta).filter(Venta.ID_Venta == datos.ID_Venta).first():
+    """
+    Crea una solicitud de devolución con las siguientes validaciones:
+    1. La venta debe estar en estado Entregado (4).
+    2. No debe existir ya una devolución Pendiente o Aprobada para la misma venta.
+    3. Los productos a devolver deben pertenecer a la venta.
+    4. La cantidad a devolver no puede superar la cantidad comprada.
+    5. Se debe devolver al menos un producto.
+    """
+    # 1. Venta existe y está entregada
+    venta = db.query(Venta).filter(Venta.ID_Venta == datos.ID_Venta).first()
+    if not venta:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
 
+    if venta.Estado != VENTA_ENTREGADA:
+        raise HTTPException(
+            status_code=400,
+            detail="Solo puedes solicitar una devolución para pedidos ya entregados"
+        )
+
+    # 2. No duplicar devoluciones activas para la misma venta
+    existente = db.query(Devolucion).filter(
+        Devolucion.ID_Venta == datos.ID_Venta,
+        Devolucion.Estado.in_([ESTADO_PENDIENTE, ESTADO_APROBADA])
+    ).first()
+    if existente:
+        raise HTTPException(
+            status_code=400,
+            detail="Este pedido ya tiene una solicitud de devolución activa"
+        )
+
+    # 3. Cliente existe
     if not db.query(Usuario).filter(Usuario.ID_Usuario == datos.ID_Usuario).first():
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
+    # 4. Validar productos: deben estar en la venta y la cantidad no debe superarse
+    if not datos.productos:
+        raise HTTPException(status_code=400, detail="Debes seleccionar al menos un producto")
+
+    for p in datos.productos:
+        vxp = db.query(VentaXProducto).filter(
+            VentaXProducto.ID_Venta    == datos.ID_Venta,
+            VentaXProducto.ID_Producto == p.ID_Producto
+        ).first()
+        if not vxp:
+            producto = db.query(Producto).filter(
+                Producto.ID_Producto == p.ID_Producto
+            ).first()
+            nombre = producto.nombre if producto else str(p.ID_Producto)
+            raise HTTPException(
+                status_code=400,
+                detail=f"El producto '{nombre}' no pertenece a este pedido"
+            )
+        if p.Cantidad > vxp.Cantidad:
+            producto = db.query(Producto).filter(
+                Producto.ID_Producto == p.ID_Producto
+            ).first()
+            nombre = producto.nombre if producto else str(p.ID_Producto)
+            raise HTTPException(
+                status_code=400,
+                detail=f"No puedes devolver más unidades de '{nombre}' de las que compraste ({vxp.Cantidad})"
+            )
+
+    # 5. Calcular total
     total = sum(
         Decimal(str(p.PrecioUnitario)) * Decimal(str(p.Cantidad))
         for p in datos.productos
     )
-
-    ESTADO_PENDIENTE = 1
 
     nueva = Devolucion(
         ID_Venta        = datos.ID_Venta,
@@ -190,11 +257,14 @@ def crear_devolucion(db: Session, datos: DevolucionCreate) -> dict:
 
 def resolver_devolucion(db: Session, id_devolucion: int, datos: DevolucionResolucion) -> dict:
     """
-    Aprueba o rechaza la devolución.
-    Si se aprueba (Estado=2), recarga automáticamente el crédito del cliente.
+    Aprueba (Estado=2) o rechaza (Estado=3) una devolución pendiente.
+    Al aprobar, recarga automáticamente el crédito del cliente.
     """
-    ESTADO_APROBADA  = 2
-    ESTADO_RECHAZADA = 3
+    if datos.Estado not in {ESTADO_APROBADA, ESTADO_RECHAZADA}:
+        raise HTTPException(
+            status_code=400,
+            detail="Estado inválido. Use 2 (Aprobada) o 3 (Rechazada)"
+        )
 
     dev = db.query(Devolucion).filter(
         Devolucion.ID_Devolucion == id_devolucion
@@ -202,8 +272,7 @@ def resolver_devolucion(db: Session, id_devolucion: int, datos: DevolucionResolu
     if not dev:
         raise HTTPException(status_code=404, detail="Devolución no encontrada")
 
-    # Evita resolver una devolución ya resuelta
-    if dev.Estado in {ESTADO_APROBADA, ESTADO_RECHAZADA}:
+    if dev.Estado != ESTADO_PENDIENTE:
         raise HTTPException(
             status_code=400,
             detail="Esta devolución ya fue resuelta"
@@ -214,7 +283,6 @@ def resolver_devolucion(db: Session, id_devolucion: int, datos: DevolucionResolu
     dev.UsuarioAprueba  = datos.UsuarioAprueba
     dev.FechaAprobacion = datetime.now()
 
-    # Si se aprueba, recarga el crédito del cliente automáticamente
     if datos.Estado == ESTADO_APROBADA:
         _recargar_credito(
             db            = db,

@@ -34,13 +34,14 @@ def mis_devoluciones(
 @router.get("/", response_model=DevolucionListResponse)
 def listar_devoluciones(
     pagina:     int           = Query(1, ge=1),
-    por_pagina: int           = Query(10, ge=1, le=100),
+    por_pagina: int           = Query(20, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
+    estado:     Optional[int] = Query(None),
     db:         Session       = Depends(get_db),
     _:          dict          = Depends(requiere_permiso("ver_devoluciones"))
 ):
-    """Lista paginada de devoluciones (admin). Busca por nombre del cliente."""
-    return obtener_devoluciones(db, pagina, por_pagina, busqueda)
+    """Lista paginada de devoluciones (admin). Filtra por estado y busca por nombre."""
+    return obtener_devoluciones(db, pagina, por_pagina, busqueda, estado)
 
 
 @router.get("/{id_devolucion}", response_model=DevolucionResponse)
