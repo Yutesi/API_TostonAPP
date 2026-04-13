@@ -325,6 +325,34 @@ def cambiar_estado(db: Session, id_venta: int, nuevo_estado: int) -> dict:
     if not venta:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
 
+    # Si se está cancelando y el estado anterior no era ya cancelado,
+    # devolver el stock de cada producto al inventario.
+    ESTADOS_CANCELACION = {3, 5}
+    if nuevo_estado in ESTADOS_CANCELACION and venta.Estado not in ESTADOS_CANCELACION:
+        items = db.query(VentaXProducto).filter(VentaXProducto.ID_Venta == id_venta).all()
+        for item in items:
+            producto = db.query(Producto).filter(Producto.ID_Producto == item.ID_Producto).first()
+            if producto:
+                producto.Stock += item.Cantidad
+
+        # Devolver crédito si se usó en esta venta
+        detalle = db.query(DetalleVenta).filter(DetalleVenta.ID_Venta == id_venta).first()
+        if detalle and detalle.Descuento and detalle.Descuento > 0:
+            credito = db.query(CreditoCliente).filter(
+                CreditoCliente.ID_Usuario == venta.ID_Usuario
+            ).first()
+            if credito:
+                credito.Saldo        += detalle.Descuento
+                credito.Fecha_Update  = datetime.now()
+                db.add(MovimientoCredito(
+                    ID_Credito    = credito.ID_Credito,
+                    ID_Devolucion = None,
+                    ID_Venta      = id_venta,
+                    Tipo          = "recarga",
+                    Monto         = detalle.Descuento,
+                    Fecha         = datetime.now(),
+                ))
+
     venta.Estado = nuevo_estado
     db.commit()
     db.refresh(venta)
