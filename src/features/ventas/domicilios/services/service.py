@@ -173,22 +173,25 @@ def asignar_repartidor(db: Session, id_domicilio: int, id_empleado: int) -> dict
 
 
 def cambiar_estado(db: Session, id_domicilio: int, nuevo_estado: int) -> dict:
-    # ID 4 = estado que el mobile interpreta como "entregado" para domicilios.
-    # La tabla Estados no tiene un label "Entregado", pero el mobile mapea
-    # estadoApiToLabel[4] = 'entregado', por lo que usamos el ID directamente.
+    # Mapa domicilio → venta según lo que interpreta el mobile:
+    #   3 = en camino  →  venta pasa a "en camino"
+    #   4 = entregado  →  venta pasa a "entregado"
+    #   5 = cancelado  →  venta pasa a "cancelado"
     ESTADO_ENTREGADO = 4
+    ESTADOS_PROPAGAR = {3, 4, 5}
 
     dom = db.query(Domicilio).filter(Domicilio.ID_Domicilio == id_domicilio).first()
     if not dom:
         raise HTTPException(status_code=404, detail="Domicilio no encontrado")
 
-    # Al marcar como entregado: registrar fecha y propagar estado a la venta
     if nuevo_estado == ESTADO_ENTREGADO:
         dom.Fecha_entrega = datetime.now()
-        if dom.ID_Venta:
-            venta = db.query(Venta).filter(Venta.ID_Venta == dom.ID_Venta).first()
-            if venta:
-                venta.Estado = nuevo_estado
+
+    # Propagar el estado del domicilio a la venta asociada
+    if nuevo_estado in ESTADOS_PROPAGAR and dom.ID_Venta:
+        venta = db.query(Venta).filter(Venta.ID_Venta == dom.ID_Venta).first()
+        if venta:
+            venta.Estado = nuevo_estado
 
     dom.Estado = nuevo_estado
     db.commit()
