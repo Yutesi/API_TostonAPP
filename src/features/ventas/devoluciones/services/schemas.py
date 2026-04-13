@@ -13,11 +13,11 @@ class DevolucionDetalleInput(BaseModel):
 
 # ── Crear devolución (manual o desde venta) ──
 class DevolucionCreate(BaseModel):
-    ID_Venta:       int
-    ID_Usuario:     int                             # cliente que devuelve
-    ID_DetalleVenta: int
-    Motivo:         str
-    productos:      list[DevolucionDetalleInput]    # productos a devolver
+    ID_Venta:        int
+    ID_Usuario:      int                             # cliente que devuelve
+    ID_DetalleVenta: Optional[int] = None           # nullable
+    Motivo:          str
+    productos:       list[DevolucionDetalleInput]    # productos a devolver
 
 
 # ── Aprobar o rechazar devolución ──

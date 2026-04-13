@@ -3,17 +3,32 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import requiere_permiso
+from src.features.auth.services.dependencies import requiere_permiso, obtener_usuario_actual
 from .schemas import (
     DevolucionCreate, DevolucionResolucion,
     DevolucionResponse, DevolucionListResponse
 )
 from .service import (
-    obtener_devoluciones, obtener_devolucion,
+    obtener_devoluciones, obtener_mis_devoluciones, obtener_devolucion,
     crear_devolucion, resolver_devolucion
 )
 
 router = APIRouter(prefix="/devoluciones", tags=["Devoluciones"])
+
+
+@router.get("/mis-devoluciones", response_model=DevolucionListResponse)
+def mis_devoluciones(
+    pagina:     int     = Query(1, ge=1),
+    por_pagina: int     = Query(10, ge=1, le=100),
+    db:         Session = Depends(get_db),
+    actual:     dict    = Depends(obtener_usuario_actual),
+):
+    """Retorna solo las devoluciones del cliente autenticado."""
+    if actual["tipo"] != "usuario":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Solo disponible para clientes")
+    id_usuario = actual["registro"].ID_Usuario
+    return obtener_mis_devoluciones(db, id_usuario, pagina, por_pagina)
 
 
 @router.get("/", response_model=DevolucionListResponse)
@@ -24,7 +39,7 @@ def listar_devoluciones(
     db:         Session       = Depends(get_db),
     _:          dict          = Depends(requiere_permiso("ver_devoluciones"))
 ):
-    """Lista paginada de devoluciones. Busca por nombre del cliente."""
+    """Lista paginada de devoluciones (admin). Busca por nombre del cliente."""
     return obtener_devoluciones(db, pagina, por_pagina, busqueda)
 
 
@@ -40,11 +55,25 @@ def ver_devolucion(
 
 @router.post("/", response_model=DevolucionResponse, status_code=201)
 def registrar_devolucion(
-    datos: DevolucionCreate,
-    db:    Session = Depends(get_db),
-    _:     dict    = Depends(requiere_permiso("crear_devoluciones"))
+    datos:  DevolucionCreate,
+    db:     Session = Depends(get_db),
+    actual: dict    = Depends(obtener_usuario_actual),
 ):
-    """Registra una devolución. El total se calcula automáticamente. Estado inicial: Pendiente."""
+    """
+    Registra una devolución.
+    - Clientes: solo pueden devolver sus propias ventas.
+    - Empleados/Admin con permiso: pueden registrar para cualquier cliente.
+    """
+    if actual["tipo"] == "usuario":
+        # Validar que el cliente solo devuelva sus propias ventas
+        from src.shared.services.models import Venta
+        from fastapi import HTTPException as _HTTPException
+        venta = db.query(Venta).filter(Venta.ID_Venta == datos.ID_Venta).first()
+        if not venta or venta.ID_Usuario != actual["registro"].ID_Usuario:
+            raise _HTTPException(
+                status_code=403,
+                detail="Solo puedes devolver tus propias ventas"
+            )
     return crear_devolucion(db, datos)
 
 

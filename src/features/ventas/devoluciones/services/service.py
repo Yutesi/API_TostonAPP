@@ -87,6 +87,25 @@ def _recargar_credito(db: Session, id_usuario: int, monto: Decimal, id_devolucio
     ))
 
 
+def obtener_mis_devoluciones(
+    db: Session,
+    id_usuario: int,
+    pagina: int = 1,
+    por_pagina: int = 10,
+) -> dict:
+    """Retorna solo las devoluciones del cliente autenticado."""
+    query        = db.query(Devolucion).filter(Devolucion.ID_Usuario == id_usuario)
+    total        = query.count()
+    offset       = (pagina - 1) * por_pagina
+    devoluciones = query.order_by(Devolucion.FechaDevolucion.desc()).offset(offset).limit(por_pagina).all()
+    return {
+        "total":        total,
+        "pagina":       pagina,
+        "por_pagina":   por_pagina,
+        "devoluciones": [_formato_devolucion(d, db) for d in devoluciones],
+    }
+
+
 def obtener_devoluciones(
     db: Session,
     pagina: int = 1,
@@ -172,8 +191,11 @@ def crear_devolucion(db: Session, datos: DevolucionCreate) -> dict:
 def resolver_devolucion(db: Session, id_devolucion: int, datos: DevolucionResolucion) -> dict:
     """
     Aprueba o rechaza la devolución.
-    Si se aprueba, recarga automáticamente el crédito del cliente.
+    Si se aprueba (Estado=2), recarga automáticamente el crédito del cliente.
     """
+    ESTADO_APROBADA  = 2
+    ESTADO_RECHAZADA = 3
+
     dev = db.query(Devolucion).filter(
         Devolucion.ID_Devolucion == id_devolucion
     ).first()
@@ -181,11 +203,10 @@ def resolver_devolucion(db: Session, id_devolucion: int, datos: DevolucionResolu
         raise HTTPException(status_code=404, detail="Devolución no encontrada")
 
     # Evita resolver una devolución ya resuelta
-    estado_actual = _label_estado(db, dev.Estado)
-    if estado_actual and estado_actual.lower() in ["aprobada", "rechazada"]:
+    if dev.Estado in {ESTADO_APROBADA, ESTADO_RECHAZADA}:
         raise HTTPException(
             status_code=400,
-            detail=f"Esta devolución ya fue {estado_actual.lower()}"
+            detail="Esta devolución ya fue resuelta"
         )
 
     dev.Estado          = datos.Estado
@@ -194,12 +215,11 @@ def resolver_devolucion(db: Session, id_devolucion: int, datos: DevolucionResolu
     dev.FechaAprobacion = datetime.now()
 
     # Si se aprueba, recarga el crédito del cliente automáticamente
-    estado_nuevo = _label_estado(db, datos.Estado)
-    if estado_nuevo and estado_nuevo.lower() == "aprobada":
+    if datos.Estado == ESTADO_APROBADA:
         _recargar_credito(
-            db           = db,
-            id_usuario   = dev.ID_Usuario,
-            monto        = Decimal(str(dev.TotalDevuelto)),
+            db            = db,
+            id_usuario    = dev.ID_Usuario,
+            monto         = Decimal(str(dev.TotalDevuelto)),
             id_devolucion = dev.ID_Devolucion,
         )
 

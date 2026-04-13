@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import requiere_permiso
+from src.features.auth.services.dependencies import requiere_permiso, obtener_usuario_actual
 from .schemas import ProductoCreate, ProductoUpdate, ProductoResponse, ProductoListResponse
 from .service import (
     obtener_productos, obtener_producto, crear_producto,
@@ -19,9 +19,9 @@ def listar_productos(
     por_pagina: int           = Query(10, ge=1, le=100),
     busqueda:   Optional[str] = Query(None),
     db:         Session       = Depends(get_db),
-    _:          dict          = Depends(requiere_permiso("ver_productos"))
+    _:          dict          = Depends(obtener_usuario_actual),
 ):
-    """Lista paginada de productos. Busca por nombre o categoría."""
+    """Lista paginada de productos. Accesible para cualquier usuario autenticado."""
     return obtener_productos(db, pagina, por_pagina, busqueda)
 
 
@@ -29,9 +29,9 @@ def listar_productos(
 def ver_producto(
     id_producto: int,
     db:          Session = Depends(get_db),
-    _:           dict    = Depends(requiere_permiso("ver_productos"))
+    _:           dict    = Depends(obtener_usuario_actual),
 ):
-    """Retorna el detalle de un producto con imágenes y ficha técnica."""
+    """Retorna el detalle de un producto. Accesible para cualquier usuario autenticado."""
     return obtener_producto(db, id_producto)
 
 
