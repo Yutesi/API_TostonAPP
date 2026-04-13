@@ -22,8 +22,8 @@ EXPIRE_MIN = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 RESET_TOKEN_EXPIRE_MIN = 10
 CODE_EXPIRE_MIN        = 10
 
-GMAIL_USER     = os.getenv("GMAIL_USER", "ttok70579@gmail.com")
-GMAIL_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+RESEND_API_KEY  = os.getenv("RESEND_API_KEY", "")
+EMAIL_FROM      = "Brom's <onboarding@resend.dev>"
 
 # Almacén en memoria: { correo_lower: { "codigo": "123456", "expires": datetime } }
 _codigos_reset: Dict[str, Dict[str, Any]] = {}
@@ -160,10 +160,10 @@ def registrar_cliente(db: Session, datos) -> Usuario:
 # ─────────────────────────────────────────
 
 def _enviar_email_codigo(correo_destino: str, codigo: str, nombre: str = "") -> None:
-    """Envía el código de verificación al correo del usuario vía Gmail SMTP."""
+    """Envía el código de verificación vía Resend SMTP relay."""
     msg            = MIMEMultipart("alternative")
     msg["Subject"] = "🔑 Código de recuperación — Brom's"
-    msg["From"]    = GMAIL_USER
+    msg["From"]    = EMAIL_FROM
     msg["To"]      = correo_destino
 
     saludo = f"Hola <strong>{nombre}</strong>," if nombre else "Hola,"
@@ -195,10 +195,11 @@ def _enviar_email_codigo(correo_destino: str, codigo: str, nombre: str = "") -> 
     """
     msg.attach(MIMEText(html, "html"))
 
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+    # Resend SMTP relay: host=smtp.resend.com, user="resend", pass=API_KEY
+    with smtplib.SMTP("smtp.resend.com", 587) as server:
         server.starttls()
-        server.login(GMAIL_USER, GMAIL_PASSWORD)
-        server.sendmail(GMAIL_USER, correo_destino, msg.as_string())
+        server.login("resend", RESEND_API_KEY)
+        server.sendmail(EMAIL_FROM, correo_destino, msg.as_string())
 
 
 def solicitar_recuperacion(db: Session, correo: str) -> None:
