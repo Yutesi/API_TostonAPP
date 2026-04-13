@@ -187,6 +187,30 @@ def obtener_ventas(
     }
 
 
+def obtener_mis_ventas(
+    db: Session,
+    actual: dict,
+    pagina: int = 1,
+    por_pagina: int = 10,
+) -> dict:
+    """Retorna todas las ventas del cliente autenticado (cualquier estado)."""
+    if actual["tipo"] != "usuario":
+        raise HTTPException(status_code=403, detail="Solo disponible para clientes")
+
+    id_usuario = actual["registro"].ID_Usuario
+    query      = db.query(Venta).filter(Venta.ID_Usuario == id_usuario)
+    total      = query.count()
+    offset     = (pagina - 1) * por_pagina
+    ventas     = query.order_by(Venta.Fecha_pedido.desc()).offset(offset).limit(por_pagina).all()
+
+    return {
+        "total":      total,
+        "pagina":     pagina,
+        "por_pagina": por_pagina,
+        "ventas":     [_formato_venta(v, db) for v in ventas],
+    }
+
+
 def obtener_venta(db: Session, id_venta: int) -> dict:
     venta = db.query(Venta).filter(Venta.ID_Venta == id_venta).first()
     if not venta:

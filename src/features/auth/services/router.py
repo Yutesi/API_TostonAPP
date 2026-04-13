@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import Optional
+from pydantic import BaseModel
 
 from src.shared.services.database import get_db
 from .schemas import (
@@ -20,7 +22,14 @@ from .service import (
     resetear_contrasena,
 )
 from .dependencies import obtener_usuario_actual
-from src.shared.services.models import UsuarioXRol
+from src.shared.services.models import UsuarioXRol, Usuario
+
+
+class PerfilUpdate(BaseModel):
+    Telefono:    Optional[str] = None
+    Direccion:   Optional[str] = None
+    Municipio:   Optional[str] = None
+    Departamento: Optional[str] = None
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -121,3 +130,54 @@ def resetear(datos: ResetearContrasenaInput, db: Session = Depends(get_db)):
     return ResetearContrasenaResponse(
         mensaje="Contraseña actualizada correctamente. Ya puedes iniciar sesión."
     )
+
+
+@router.get("/perfil")
+def ver_perfil(actual: dict = Depends(obtener_usuario_actual), db: Session = Depends(get_db)):
+    """Retorna el perfil completo del usuario autenticado (incluye dirección y teléfono)."""
+    if actual["tipo"] != "usuario":
+        raise HTTPException(status_code=403, detail="Solo disponible para clientes")
+    registro = actual["registro"]
+    return {
+        "ID_Usuario":   registro.ID_Usuario,
+        "Nombre":       registro.Nombre,
+        "Apellidos":    registro.Apellidos,
+        "Correo":       registro.Correo,
+        "Telefono":     registro.Telefono,
+        "Direccion":    registro.Direccion,
+        "Municipio":    registro.Municipio,
+        "Departamento": registro.Departamento,
+        "tipo":         actual["tipo"],
+        "rol":          actual["rol"],
+    }
+
+
+@router.put("/perfil")
+def actualizar_perfil(
+    datos: PerfilUpdate,
+    actual: dict = Depends(obtener_usuario_actual),
+    db: Session = Depends(get_db)
+):
+    """Permite al cliente autenticado actualizar su dirección y teléfono."""
+    if actual["tipo"] != "usuario":
+        raise HTTPException(status_code=403, detail="Solo disponible para clientes")
+    registro = actual["registro"]
+    usuario  = db.query(Usuario).filter(Usuario.ID_Usuario == registro.ID_Usuario).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    for campo, valor in datos.model_dump(exclude_none=True).items():
+        setattr(usuario, campo, valor)
+
+    db.commit()
+    db.refresh(usuario)
+    return {
+        "ID_Usuario":   usuario.ID_Usuario,
+        "Nombre":       usuario.Nombre,
+        "Apellidos":    usuario.Apellidos,
+        "Correo":       usuario.Correo,
+        "Telefono":     usuario.Telefono,
+        "Direccion":    usuario.Direccion,
+        "Municipio":    usuario.Municipio,
+        "Departamento": usuario.Departamento,
+    }

@@ -3,11 +3,22 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from src.shared.services.database import get_db
-from src.features.auth.services.dependencies import requiere_permiso
+from src.features.auth.services.dependencies import requiere_permiso, obtener_usuario_actual
 from .schemas import VentaCreate, VentaEstado, VentaResponse, VentaListResponse
-from .service import obtener_ventas, obtener_venta, crear_venta, cambiar_estado
+from .service import obtener_ventas, obtener_venta, crear_venta, cambiar_estado, obtener_mis_ventas
 
 router = APIRouter(prefix="/ventas", tags=["Gestión de Ventas"])
+
+
+@router.get("/mis-ventas", response_model=VentaListResponse)
+def mis_ventas(
+    pagina:     int           = Query(1, ge=1),
+    por_pagina: int           = Query(10, ge=1, le=100),
+    db:         Session       = Depends(get_db),
+    actual:     dict          = Depends(obtener_usuario_actual),
+):
+    """Retorna las ventas del cliente autenticado (todos los estados)."""
+    return obtener_mis_ventas(db, actual, pagina, por_pagina)
 
 
 @router.get("/", response_model=VentaListResponse)
