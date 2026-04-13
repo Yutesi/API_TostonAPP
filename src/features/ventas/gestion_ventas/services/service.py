@@ -159,9 +159,17 @@ def obtener_ventas(
     db: Session,
     pagina: int = 1,
     por_pagina: int = 10,
-    busqueda: str = None
+    busqueda: str = None,
+    id_usuario: int = None,
+    estado: int = None,
 ) -> dict:
     query = db.query(Venta)
+
+    if id_usuario:
+        query = query.filter(Venta.ID_Usuario == id_usuario)
+
+    if estado:
+        query = query.filter(Venta.Estado == estado)
 
     if busqueda:
         termino      = f"%{busqueda}%"

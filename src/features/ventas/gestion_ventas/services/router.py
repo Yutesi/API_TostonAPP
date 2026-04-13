@@ -23,14 +23,16 @@ def mis_ventas(
 
 @router.get("/", response_model=VentaListResponse)
 def listar_ventas(
-    pagina:     int           = Query(1, ge=1),
-    por_pagina: int           = Query(10, ge=1, le=100),
-    busqueda:   Optional[str] = Query(None),
-    db:         Session       = Depends(get_db),
-    _:          dict          = Depends(requiere_permiso("ver_ventas"))
+    pagina:      int           = Query(1, ge=1),
+    por_pagina:  int           = Query(10, ge=1, le=100),
+    busqueda:    Optional[str] = Query(None),
+    id_usuario:  Optional[int] = Query(None),
+    estado:      Optional[int] = Query(None),
+    db:          Session       = Depends(get_db),
+    _:           dict          = Depends(requiere_permiso("ver_ventas"))
 ):
-    """Lista paginada de ventas. Busca por nombre del cliente."""
-    return obtener_ventas(db, pagina, por_pagina, busqueda)
+    """Lista paginada de ventas. Filtra por id_usuario, estado o busca por nombre."""
+    return obtener_ventas(db, pagina, por_pagina, busqueda, id_usuario, estado)
 
 
 @router.get("/{id_venta}", response_model=VentaResponse)
