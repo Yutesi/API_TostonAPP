@@ -20,6 +20,12 @@ class DevolucionCreate(BaseModel):
     productos:       list[DevolucionDetalleInput]    # productos a devolver
 
 
+# ── Editar devolución pendiente (admin) ──
+class DevolucionUpdate(BaseModel):
+    Motivo:     Optional[str] = None
+    Comentario: Optional[str] = None
+
+
 # ── Aprobar o rechazar devolución ──
 class DevolucionResolucion(BaseModel):
     Estado:         int         # ID del estado: Aprobada o Rechazada

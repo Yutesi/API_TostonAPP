@@ -7,7 +7,7 @@ from src.shared.services.models import (
     Devolucion, DevolucionDetalle, Venta, VentaXProducto, Usuario,
     Producto, CreditoCliente, MovimientoCredito
 )
-from .schemas import DevolucionCreate, DevolucionResolucion
+from .schemas import DevolucionCreate, DevolucionResolucion, DevolucionUpdate
 
 # ── Estados de devoluciones (no dependen de la tabla Estados compartida) ──────
 ESTADO_PENDIENTE = 1
@@ -253,6 +253,37 @@ def crear_devolucion(db: Session, datos: DevolucionCreate) -> dict:
     db.commit()
     db.refresh(nueva)
     return _formato_devolucion(nueva, db)
+
+
+def editar_devolucion(db: Session, id_devolucion: int, datos: DevolucionUpdate) -> dict:
+    """
+    Permite al admin editar el motivo o agregar un comentario interno
+    mientras la devolución esté Pendiente.
+    """
+    dev = db.query(Devolucion).filter(
+        Devolucion.ID_Devolucion == id_devolucion
+    ).first()
+    if not dev:
+        raise HTTPException(status_code=404, detail="Devolución no encontrada")
+
+    if dev.Estado != ESTADO_PENDIENTE:
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se pueden editar devoluciones en estado Pendiente"
+        )
+
+    if datos.Motivo is not None:
+        datos_motivo = datos.Motivo.strip()
+        if not datos_motivo:
+            raise HTTPException(status_code=400, detail="El motivo no puede estar vacío")
+        dev.Motivo = datos_motivo
+
+    if datos.Comentario is not None:
+        dev.Comentario = datos.Comentario.strip() or None
+
+    db.commit()
+    db.refresh(dev)
+    return _formato_devolucion(dev, db)
 
 
 def resolver_devolucion(db: Session, id_devolucion: int, datos: DevolucionResolucion) -> dict:

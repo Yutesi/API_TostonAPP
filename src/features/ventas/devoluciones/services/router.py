@@ -5,12 +5,12 @@ from typing import Optional
 from src.shared.services.database import get_db
 from src.features.auth.services.dependencies import requiere_permiso, obtener_usuario_actual
 from .schemas import (
-    DevolucionCreate, DevolucionResolucion,
+    DevolucionCreate, DevolucionResolucion, DevolucionUpdate,
     DevolucionResponse, DevolucionListResponse
 )
 from .service import (
     obtener_devoluciones, obtener_mis_devoluciones, obtener_devolucion,
-    crear_devolucion, resolver_devolucion
+    crear_devolucion, editar_devolucion, resolver_devolucion
 )
 
 router = APIRouter(prefix="/devoluciones", tags=["Devoluciones"])
@@ -76,6 +76,17 @@ def registrar_devolucion(
                 detail="Solo puedes devolver tus propias ventas"
             )
     return crear_devolucion(db, datos)
+
+
+@router.patch("/{id_devolucion}", response_model=DevolucionResponse)
+def editar_dev(
+    id_devolucion: int,
+    datos:         DevolucionUpdate,
+    db:            Session = Depends(get_db),
+    _:             dict    = Depends(requiere_permiso("editar_devoluciones"))
+):
+    """Edita motivo o comentario interno de una devolución pendiente."""
+    return editar_devolucion(db, id_devolucion, datos)
 
 
 @router.patch("/{id_devolucion}/resolver", response_model=DevolucionResponse)
