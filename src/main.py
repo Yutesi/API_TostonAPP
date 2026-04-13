@@ -71,3 +71,60 @@ app.include_router(dashboard_router,     prefix=PREFIX)
 @app.get("/")
 def root():
     return {"mensaje": "API funcionando ✅"}
+
+
+# ── Endpoint temporal de limpieza (solo Admin) ────────────────────────────────
+from fastapi import Depends
+from sqlalchemy.orm import Session
+from decimal import Decimal
+from src.shared.services.database import get_db
+from src.features.auth.services.dependencies import obtener_usuario_actual
+from src.shared.services.models import (
+    DevolucionDetalle, MovimientoCredito, Devolucion,
+    DescuentoXVenta, DescuentoXUsuario, Descuento,
+    Domicilio, DetalleVenta, VentaXProducto, Venta,
+    CreditoCliente, Producto,
+)
+
+@app.delete("/api/admin/reset-transaccional")
+def reset_transaccional(
+    actual: dict    = Depends(obtener_usuario_actual),
+    db:     Session = Depends(get_db),
+):
+    if actual.get("rol") != "Admin":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Solo el Admin puede ejecutar esto")
+
+    ESTADOS_CANCELADOS = {3, 5}
+    ventas_activas = db.query(Venta).filter(Venta.Estado.notin_(ESTADOS_CANCELADOS)).all()
+    ids_activas    = {v.ID_Venta for v in ventas_activas}
+    items = db.query(VentaXProducto).filter(VentaXProducto.ID_Venta.in_(ids_activas)).all() if ids_activas else []
+
+    restaurados = {}
+    for item in items:
+        restaurados[item.ID_Producto] = restaurados.get(item.ID_Producto, 0) + item.Cantidad
+    for id_prod, cant in restaurados.items():
+        p = db.query(Producto).filter(Producto.ID_Producto == id_prod).first()
+        if p:
+            p.Stock += cant
+
+    conteo = {}
+    conteo["DevolucionDetalle"] = db.query(DevolucionDetalle).delete()
+    conteo["MovimientoCredito"] = db.query(MovimientoCredito).delete()
+    conteo["Devoluciones"]      = db.query(Devolucion).delete()
+    conteo["DescuentoXVenta"]   = db.query(DescuentoXVenta).delete()
+    conteo["Domicilios"]        = db.query(Domicilio).delete()
+    conteo["DetalleVenta"]      = db.query(DetalleVenta).delete()
+    conteo["VentaXProducto"]    = db.query(VentaXProducto).delete()
+    conteo["Ventas"]            = db.query(Venta).delete()
+
+    db.query(CreditoCliente).update({"Saldo": Decimal("0"), "Fecha_Update": None})
+    db.query(Descuento).update({"Usos_Actuales": 0})
+    db.query(DescuentoXUsuario).update({"Usado": False})
+
+    db.commit()
+    return {
+        "mensaje":           "Base de datos transaccional limpiada ✅",
+        "stock_restaurado":  len(restaurados),
+        "filas_eliminadas":  conteo,
+    }
