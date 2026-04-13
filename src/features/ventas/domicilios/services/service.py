@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from datetime import datetime
 
-from src.shared.services.models import Domicilio, Venta, Empleado, Usuario, Estado
+from src.shared.services.models import Domicilio, Venta, Empleado, Usuario, Estado, Producto, VentaXProducto
 from .schemas import DomicilioCreate, DomicilioUpdate
 
 
@@ -177,10 +177,15 @@ def cambiar_estado(db: Session, id_domicilio: int, nuevo_estado: int) -> dict:
     if not dom:
         raise HTTPException(status_code=404, detail="Domicilio no encontrado")
 
-    # Si se marca como Entregado, registra la fecha de entrega automáticamente
-    estado = _label_estado(db, nuevo_estado)
-    if estado and estado.lower() == "entregado":
+    label = _label_estado(db, nuevo_estado)
+
+    # Si se marca como Entregado: registrar fecha y propagar el estado a la venta
+    if label and label.lower() == "entregado":
         dom.Fecha_entrega = datetime.now()
+        if dom.ID_Venta:
+            venta = db.query(Venta).filter(Venta.ID_Venta == dom.ID_Venta).first()
+            if venta:
+                venta.Estado = nuevo_estado
 
     dom.Estado = nuevo_estado
     db.commit()
