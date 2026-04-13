@@ -10,6 +10,8 @@ from .schemas import (
     RegistroInput,
     RecuperarContrasenaInput,
     RecuperarContrasenaResponse,
+    VerificarCodigoInput,
+    VerificarCodigoResponse,
     ResetearContrasenaInput,
     ResetearContrasenaResponse,
 )
@@ -19,6 +21,7 @@ from .service import (
     obtener_nombre_rol,
     registrar_cliente,
     solicitar_recuperacion,
+    verificar_codigo_recuperacion,
     resetear_contrasena,
 )
 from .dependencies import obtener_usuario_actual
@@ -108,25 +111,41 @@ def obtener_perfil(actual: dict = Depends(obtener_usuario_actual)):
 @router.post("/recuperar-contrasena", response_model=RecuperarContrasenaResponse)
 def recuperar_contrasena(datos: RecuperarContrasenaInput, db: Session = Depends(get_db)):
     """
-    Genera un token de recuperación válido por 15 minutos.
-    MODO ACTUAL: el token se retorna en la respuesta.
-    MODO FUTURO: se enviará por correo y reset_token será vacío.
+    Genera un código de 6 dígitos y lo envía al correo del usuario.
+    Siempre responde con el mismo mensaje para no revelar si el correo existe.
     """
-    token = solicitar_recuperacion(db, datos.correo)
+    try:
+        solicitar_recuperacion(db, datos.correo)
+    except Exception:
+        pass  # nunca revelar el error
     return RecuperarContrasenaResponse(
-        mensaje     = "Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.",
-        reset_token = token,
+        mensaje="Si el correo está registrado, recibirás un código de verificación en tu bandeja de entrada."
+    )
+
+
+@router.post("/verificar-codigo", response_model=VerificarCodigoResponse)
+def verificar_codigo(datos: VerificarCodigoInput, db: Session = Depends(get_db)):
+    """
+    Valida el código de 6 dígitos enviado al correo.
+    Si es correcto retorna un token de reset válido por 10 minutos.
+    """
+    try:
+        token = verificar_codigo_recuperacion(db, datos.correo, datos.codigo)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return VerificarCodigoResponse(
+        reset_token=token,
+        mensaje="Código verificado. Ahora puedes establecer tu nueva contraseña."
     )
 
 
 @router.post("/resetear-contrasena", response_model=ResetearContrasenaResponse)
 def resetear(datos: ResetearContrasenaInput, db: Session = Depends(get_db)):
-    """Recibe el token y la nueva contraseña. Actualiza si el token es válido."""
+    """Recibe el token (obtenido en /verificar-codigo) y la nueva contraseña."""
     try:
         resetear_contrasena(db, datos.token, datos.nueva_contrasena)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
     return ResetearContrasenaResponse(
         mensaje="Contraseña actualizada correctamente. Ya puedes iniciar sesión."
     )

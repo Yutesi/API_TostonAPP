@@ -48,8 +48,18 @@ class RecuperarContrasenaInput(BaseModel):
 
 
 class RecuperarContrasenaResponse(BaseModel):
-    mensaje:     str
+    mensaje: str   # NO reset_token — el código va al correo del usuario
+
+
+# ── Verificar código de 6 dígitos ──
+class VerificarCodigoInput(BaseModel):
+    correo: str = Field(example="usuario@gmail.com")
+    codigo: str = Field(example="482931")
+
+
+class VerificarCodigoResponse(BaseModel):
     reset_token: str
+    mensaje:     str
 
 
 # ── Resetear contraseña ──
