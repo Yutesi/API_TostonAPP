@@ -10,7 +10,18 @@ from .service import (
     editar_producto, agregar_imagenes, eliminar_imagen, eliminar_producto
 )
 
-router = APIRouter(prefix="/productos", tags=["Gestión de Productos"])
+router = APIRouter(prefix="/productos", tags=["Gesti\u00f3n de Productos"])
+
+
+@router.get("/publico", response_model=ProductoListResponse)
+def listar_productos_publico(
+    pagina:     int           = Query(1, ge=1),
+    por_pagina: int           = Query(10, ge=1, le=100),
+    busqueda:   Optional[str] = Query(None),
+    db:         Session       = Depends(get_db),
+):
+    """Lista paginada de productos. P\u00daBLICO - Sin autenticaci\u00f3n requerida."""
+    return obtener_productos(db, pagina, por_pagina, busqueda)
 
 
 @router.get("/", response_model=ProductoListResponse)
@@ -41,7 +52,7 @@ def agregar_producto(
     db:    Session = Depends(get_db),
     _:     dict    = Depends(requiere_permiso("crear_productos"))
 ):
-    """Crea un producto. El estado se calcula automáticamente según stock."""
+    """Crea un producto. El estado se calcula autom\u00e1ticamente seg\u00fan stock."""
     return crear_producto(db, datos)
 
 
@@ -52,7 +63,7 @@ def actualizar_producto(
     db:          Session = Depends(get_db),
     _:           dict    = Depends(requiere_permiso("editar_productos"))
 ):
-    """Edita el producto. El estado se recalcula automáticamente."""
+    """Edita el producto. El estado se recalcula autom\u00e1ticamente."""
     return editar_producto(db, id_producto, datos)
 
 
@@ -63,7 +74,7 @@ def subir_imagenes(
     db:          Session          = Depends(get_db),
     _:           dict             = Depends(requiere_permiso("editar_productos"))
 ):
-    """Sube una o varias imágenes al producto (multipart/form-data)."""
+    """Sube una o varias im\u00e1genes al producto (multipart/form-data)."""
     return agregar_imagenes(db, id_producto, imagenes)
 
 
@@ -74,7 +85,7 @@ def borrar_imagen(
     db:          Session = Depends(get_db),
     _:           dict    = Depends(requiere_permiso("editar_productos"))
 ):
-    """Elimina una imagen específica del producto."""
+    """Elimina una imagen espec\u00edfica del producto."""
     return eliminar_imagen(db, id_imagen)
 
 
@@ -84,5 +95,5 @@ def borrar_producto(
     db:          Session = Depends(get_db),
     _:           dict    = Depends(requiere_permiso("eliminar_productos"))
 ):
-    """Elimina el producto junto con sus imágenes y ficha técnica."""
+    """Elimina el producto junto con sus im\u00e1genes y ficha t\u00e9cnica."""
     return eliminar_producto(db, id_producto)
