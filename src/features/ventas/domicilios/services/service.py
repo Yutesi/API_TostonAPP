@@ -12,7 +12,7 @@ def _label_estado(db: Session, id_estado: int) -> str:
 
 
 def _formato_domicilio(dom: Domicilio, db: Session) -> dict:
-    """Construye el dict con cliente, repartidor y estado."""
+    """Construye el dict con cliente, repartidor, estado y datos de la venta."""
     # Obtiene el cliente desde la venta
     venta   = db.query(Venta).filter(Venta.ID_Venta == dom.ID_Venta).first()
     cliente = db.query(Usuario).filter(
@@ -23,6 +23,27 @@ def _formato_domicilio(dom: Domicilio, db: Session) -> dict:
     repartidor = db.query(Empleado).filter(
         Empleado.ID_Empleado == dom.ID_Empleado
     ).first() if dom.ID_Empleado else None
+
+    # Datos de la venta: total, metodo_pago y productos
+    total       = float(venta.Total) if venta and venta.Total else 0.0
+    metodo_pago = venta.Metodo_Pago or "" if venta else ""
+    productos   = []
+    if venta:
+        items = db.query(VentaXProducto).filter(
+            VentaXProducto.ID_Venta == venta.ID_Venta
+        ).all()
+        for item in items:
+            prod   = db.query(Producto).filter(
+                Producto.ID_Producto == item.ID_Producto
+            ).first()
+            precio = float(prod.Precio_venta) if prod and prod.Precio_venta else 0.0
+            productos.append({
+                "ID_Producto":     item.ID_Producto,
+                "nombre_producto": prod.nombre if prod else "",
+                "Cantidad":        item.Cantidad,
+                "precio_unitario": precio,
+                "subtotal":        precio * (item.Cantidad or 0),
+            })
 
     return {
         "ID_Domicilio":         dom.ID_Domicilio,
@@ -38,6 +59,9 @@ def _formato_domicilio(dom: Domicilio, db: Session) -> dict:
         "Direccion_entrega":    dom.Direccion_entrega,
         "Municipio_entrega":    dom.Municipio_entrega,
         "Departamento_entrega": dom.Departamento_entrega,
+        "total":                total,
+        "metodo_pago":          metodo_pago,
+        "productos":            productos,
     }
 
 
@@ -173,10 +197,10 @@ def asignar_repartidor(db: Session, id_domicilio: int, id_empleado: int) -> dict
 
 
 def cambiar_estado(db: Session, id_domicilio: int, nuevo_estado: int) -> dict:
-    # Mapa domicilio → venta según lo que interpreta el mobile:
-    #   3 = en camino  →  venta pasa a "en camino"
-    #   4 = entregado  →  venta pasa a "entregado"
-    #   5 = cancelado  →  venta pasa a "cancelado"
+    # Mapa domicilio -> venta segun lo que interpreta el mobile:
+    #   3 = en camino  ->  venta pasa a "en camino"
+    #   4 = entregado  ->  venta pasa a "entregado"
+    #   5 = cancelado  ->  venta pasa a "cancelado"
     ESTADO_ENTREGADO = 4
     ESTADOS_PROPAGAR = {3, 4, 5}
 
